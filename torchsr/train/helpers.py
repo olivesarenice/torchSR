@@ -1,12 +1,11 @@
 import piq
 import torch
 import torch.nn as nn
-import torchvision.transforms.functional as F
-
 import torchsr.models as models
-
+import torchvision.transforms.functional as F
 from torchsr.datasets import *
 from torchsr.transforms import *
+
 from .enums import *
 from .options import args
 
@@ -33,6 +32,8 @@ def _name_to_dataset(name, split, transform):
         return B100(**kwargs)
     if name == DatasetType.Urban100:
         return Urban100(**kwargs)
+    if name == DatasetType.UserSupplied:
+        return UserSupplied(**kwargs)
     raise ValueError("Unknown dataset")
 
 
