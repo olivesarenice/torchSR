@@ -149,15 +149,13 @@ data.add_argument(
 data.add_argument(
     "--dataset-train",
     nargs="+",
-    default=[DatasetType.Div2KBicubic],
     type=DatasetType,
-    choices=[DatasetType.Div2KBicubic, DatasetType.Div2KUnknown],
+    choices=list(DatasetType),
     help="Training dataset",
 )
 data.add_argument(
     "--dataset-val",
     nargs="+",
-    default=[DatasetType.Div2KBicubic],
     type=DatasetType,
     choices=list(DatasetType),
     help="Validation dataset",

@@ -50,6 +50,7 @@ class DatasetType(CEnum):
     Set14 = "set14"
     B100 = "b100"
     Urban100 = "urban100"
+    UserSupplied = "usersupplied"
 
 
 class DataAugmentationType(CEnum):

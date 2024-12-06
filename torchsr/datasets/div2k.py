@@ -169,7 +169,7 @@ class Div2K(FolderByDir):
         ("bicubic", "test", 4): os.path.join("DIV2K_test_LR_bicubic", "X4"),
         ("unknown", "test", 2): os.path.join("DIV2K_test_LR_unknown", "X2"),
         ("unknown", "test", 3): os.path.join("DIV2K_test_LR_unknown", "X3"),
-        ("unknown", "test", 4): os.path.join("DIV2K_test_LR_unknown", "X4")
+        ("unknown", "test", 4): os.path.join("DIV2K_test_LR_unknown", "X4"),
         # real_wild is there but needs special handling (multiple downscaled images)
         # , ('real_wild', 'train', 4) : os.path.join('DIV2K_train_LR_wild')
         # , ('real_wild', 'val', 4) : os.path.join('DIV2K_valid_LR_wild')
