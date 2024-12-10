@@ -3,6 +3,8 @@
 train_network () {
     arch=$1
     scale=$2
+    dataset_type=$3
+    dataset_root=$4
     echo Training network "${arch}" "x${scale}"
     echo python -m torchsr.train \
         --arch "${arch}" \
@@ -10,23 +12,21 @@ train_network () {
         --tune-backend \
         --dataset-train "usersupplied" \
         --dataset-val "usersupplied" \
-        --dataset-root "/home/oliver/ADRA/experiments-superres/dataset/hi_res_focus_zip/bw"\
-        --log-dir "logs_train/${arch}_x${scale}" \
-        --save-checkpoint "${arch}_x${scale}.pt" \
+        --dataset-root "${dataset_root}"\
+        --log-dir "logs_train/${arch}_x${scale}_${dataset_type}" \
+        --save-checkpoint "${arch}_x${scale}_${dataset_type}.pt" \
         --lr "${learning_rate}" \
         --epochs "${epochs}" \
         --lr-decay-steps $((epochs*2/3)) $((epochs*5/6)) \
         --lr-decay-rate 3 \
-        # --patch-size-train $(( (patch_size+1) * scale)) \
-        # --shave-border "${scale}" \
-        # --replication-pad 4
+        --weight-norm 
     python -m torchsr.train \
         --arch "${arch}" \
         --scale "${scale}" \
         --tune-backend \
         --dataset-train "usersupplied" \
         --dataset-val "usersupplied" \
-        --dataset-root "/home/oliver/ADRA/experiments-superres/dataset/hi_res_focus_zip/bw"\
+        --dataset-root "${dataset_root}"\
         --log-dir "logs_train/${arch}_x${scale}" \
         --save-checkpoint "${arch}_x${scale}.pt" \
         --lr "${learning_rate}" \
@@ -34,9 +34,6 @@ train_network () {
         --lr-decay-steps $((epochs*2/3)) $((epochs*5/6)) \
         --lr-decay-rate 3 \
         --weight-norm
-        # --patch-size-train $(( (patch_size+1) * scale)) \
-        # --shave-border "${scale}" \
-        # --replication-pad 4 \
         
 }
 
@@ -74,7 +71,7 @@ patch_size=48
 learning_rate=0.001
 
 # NinaSR-B0
-train_network ninasr_b0 4
+train_network ninasr_b0 4 pa /home/oliver/ADRA/experiments-superres/dataset/model_usage/pa
 # train_network ninasr_b0 3 
 # train_network ninasr_b0 4 
 # train_network ninasr_b0 8 

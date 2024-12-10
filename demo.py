@@ -1,11 +1,12 @@
 import os
+from pprint import pprint
 
+import cv2
 import numpy as np
 import torch
 from imutils import paths
-from PIL import Image
-from skimage.metrics import peak_signal_noise_ratio as psnr
-from skimage.metrics import structural_similarity as ssim
+from PIL import Image, ImageEnhance
+from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from skimage.transform import resize
 from torchsr.models import ninasr_b0  # or import rcan if needed
 from torchvision.transforms.functional import to_pil_image, to_tensor
@@ -33,45 +34,72 @@ def resize_image_to_match(image1, image2, resample_method=Image.BICUBIC):
     return resized_image
 
 
-def calculate_psnr_ssim(folder_sr, folder_hr, scale):
+def calculate_psnr_ssim(folder_in, folder_hr, upscale_type):
+
+    # folder_in can be of
+    # LR or HR
+
     psnr_list = []
     ssim_list = []
 
     # Get list of image files in both folders
-    files_sr = sorted(os.listdir(folder_sr))  # Assuming identical filenames
-    files_hr = sorted(os.listdir(folder_hr))
-
-    for file_sr, file_hr in zip(files_sr, files_hr):
+    files_hr = sorted(os.listdir(folder_hr))  # Assuming identical filenames
+    files_in = sorted(os.listdir(folder_in))
+    print(upscale_type)
+    for file_in, file_hr in zip(files_in, files_hr):
+        print(file_in, file_hr)
         # Check if both files are images and have the same filename
-        if file_sr.endswith(("jpg", "jpeg", "png")) and file_hr.endswith(
+        if file_in.endswith(("jpg", "jpeg", "png")) and file_hr.endswith(
             ("jpg", "jpeg", "png")
         ):
-            # Open SR image
-            sr_img = Image.open(os.path.join(folder_sr, file_sr)).convert("RGB")
-            sr_img_np = np.array(sr_img)
-
-            # Open LR image and convert to numpy array
             hr_img = Image.open(os.path.join(folder_hr, file_hr)).convert("RGB")
+            hr_img_np = np.array(hr_img)
 
-            # Resize LR image to match SR image resolution (upscale by a factor of `scale`)
+            in_img = Image.open(os.path.join(folder_in, file_in)).convert("RGB")
 
-            hr_img_resized = np.array(resize_image_to_match(hr_img, sr_img))
+            match upscale_type:  # This is only for LR folders
+                case "lr_nn":
+                    in_img_resized = np.array(
+                        resize_image_to_match(in_img, hr_img, Image.NEAREST)
+                    )
+                case "lr_bilinear":
+                    in_img_resized = np.array(
+                        resize_image_to_match(in_img, hr_img, Image.BILINEAR)
+                    )
+                case "sr":  # This is for the already SR upscaled folder
+                    in_img = resize_image_to_match(in_img, hr_img)
+                    in_img_resized = np.array(in_img)
 
-            # Compute PSNR and SSIM for upscaled LR and SR images
-            psnr_value = psnr(
-                hr_img_resized, sr_img_np, data_range=255
+                case "sr_enhanced":
+                    in_img = resize_image_to_match(in_img, hr_img)
+                    in_img_resized = np.array(enhance(in_img))
+            psnr_value = peak_signal_noise_ratio(
+                hr_img_np, in_img_resized, data_range=255
             )  # PSNR between the resized LR and SR images
-            ssim_value = ssim(
-                hr_img_resized, sr_img_np, multichannel=True, win_size=3, data_range=255
+            ssim_value = structural_similarity(
+                hr_img_np, in_img_resized, multichannel=True, win_size=3, data_range=255
             )  # SSIM comparison
 
             psnr_list.append(psnr_value)
             ssim_list.append(ssim_value)
+    psnr = sum(psnr_list) / len(psnr_list)
+    ssim = sum(ssim_list) / len(ssim_list)
+    return {"psnr": float(round(psnr, 2)), "ssim": float(round(ssim, 3))}
 
-            # print(f"PSNR for {file_sr}: {psnr_value:.4f}")
-            # print(f"SSIM for {file_sr}: {ssim_value:.4f}")
 
-    return {"psnr": psnr_list, "ssim": ssim_list}
+def enhance(image):
+    img = np.array(image)
+
+    # A 5x5 kernel means that the morphological operation will look at a 5x5 pixel area around each pixel
+    # (its "neighborhood") when applying the opening or closing operation.
+    # This is a moderate kernel size, which is typically strong enough
+    # to remove small noise or fill in small holes without being overly aggressive.
+    kernel = np.ones((5, 5), np.uint8)
+
+    img = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
+    img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernel)
+    img_obj = Image.fromarray(img)
+    return img_obj
 
 
 def create_visualization(input_dir, output_dir, hr_dir, visualization_dir):
@@ -109,6 +137,7 @@ def create_visualization(input_dir, output_dir, hr_dir, visualization_dir):
             output_image = output_image.resize(
                 (int(output_image.width * height / output_image.height), height)
             )
+            output_image_enhanced = enhance(output_image)
             hr_image = hr_image.resize(
                 (int(hr_image.width * height / hr_image.height), height)
             )
@@ -120,6 +149,7 @@ def create_visualization(input_dir, output_dir, hr_dir, visualization_dir):
                     input_nn_image.width
                     + input_bi_image.width
                     + output_image.width
+                    + output_image_enhanced.width
                     + hr_image.width,
                     height,
                 ),
@@ -130,8 +160,23 @@ def create_visualization(input_dir, output_dir, hr_dir, visualization_dir):
                 output_image, (input_bi_image.width + input_nn_image.width, 0)
             )
             combined_image.paste(
+                output_image_enhanced,
+                (
+                    output_image_enhanced.width
+                    + input_bi_image.width
+                    + input_nn_image.width,
+                    0,
+                ),
+            )
+            combined_image.paste(
                 hr_image,
-                (input_bi_image.width + input_nn_image.width + output_image.width, 0),
+                (
+                    input_bi_image.width
+                    + input_nn_image.width
+                    + output_image.width
+                    + output_image_enhanced.width,
+                    0,
+                ),
             )
 
             # Save the combined image in the visualization folder
@@ -143,64 +188,105 @@ def create_visualization(input_dir, output_dir, hr_dir, visualization_dir):
             print(f"Error processing {filename}: {e}")
 
 
-generate_sr = False
-scale = "8"
-model = f"ninasr_b0_x{scale}"
-output_dir = f"/home/oliver/ADRA/experiments-superres/dataset/hi_res_focus_zip/bw/UserSupplied/sr_output/{model}"
-input_dir = f"/home/oliver/ADRA/experiments-superres/dataset/hi_res_focus_zip/bw/UserSupplied/UserSupplied_test_LR_bicubic/X{scale}"
-hr_dir = f"/home/oliver/ADRA/experiments-superres/dataset/hi_res_focus_zip/bw/UserSupplied/UserSupplied_test_HR"
-visualization_dir = os.path.join(output_dir, "visual")
-
-print(f"Evaluating testset for {model} on {input_dir}")
-
-os.makedirs(output_dir, exist_ok=True)
-os.makedirs(visualization_dir, exist_ok=True)
-
-if generate_sr:
-    # Load your trained model
-    model_path = f"./{model}_model.pt"
+def load_model(model_name, scale):
+    model_path = f"./{model_name}_model.pt"
     model = ninasr_b0(
         scale=int(scale)
     )  # Use the correct scale for your model (8 in this case)
     model.load_state_dict(torch.load(model_path))
     model.eval()  # Set the model to evaluation mode
+    return model
 
+
+def generate_sr(input_dir, output_dir, model, sample=None):
+    print(f"Generating SR for {input_dir} to {output_dir}")
     img_paths = list(paths.list_images(input_dir))
+    if sample:
+        img_paths = img_paths[0:sample]
     for img_path in img_paths:
         print(img_path)
 
-        # img_path = "/home/oliver/ADRA/experiments-superres/dataset/hi_res_focus_zip/bw/UserSupplied/UserSupplied_test_LR_bicubic/X8/266222200-003_2715_988.jpg"
-        # img_path = "/home/oliver/ADRA/experiments-superres/dataset/pa_clean/lo_res/292608105-002_1139_275.jpg"
-        # Open the image file
         image = Image.open(img_path)
-
-        # Convert the PIL image to a tensor
         lr_tensor = to_tensor(image).unsqueeze(0)  # Add batch dimension
-
-        # Run the super-resolution model (forward pass)
         with torch.no_grad():  # Disable gradient calculation for inference
             sr_tensor = model(lr_tensor)  # Pass the LR tensor through the model
-
-        # Convert the super-resolved tensor back to a PIL image
         sr_image = to_pil_image(sr_tensor.squeeze(0))  # Remove the batch dimension
-
-        # # Show the super-resolved image
-        # sr_image.show()
-
-        # Optionally, save the output image
         save_path = os.path.join(output_dir, os.path.basename(img_path))
         sr_image.save(save_path)
+    return None
 
-metrics = calculate_psnr_ssim(output_dir, hr_dir, scale=int(scale))
-psnr = sum(metrics["psnr"]) / len(metrics["psnr"])
-ssim = sum(metrics["ssim"]) / len(metrics["ssim"])
 
-print(f"HR original vs. SR output: PSNR - {psnr} , SSIM - {ssim}")
+def generate_enhanced_sr_wild(input_dir, output_dir, model, sample=None):
+    print(f"Generating SR enhanced for in the wild {input_dir} to {output_dir}")
+    img_paths = list(paths.list_images(input_dir))
+    if sample:
+        img_paths = img_paths[0:sample]
+    for img_path in img_paths:
+        print(img_path)
 
-# metrics = calculate_psnr_ssim(output_dir, input_dir, scale=8)
-# psnr = sum(metrics["psnr"]) / len(metrics["psnr"])
-# ssim = sum(metrics["ssim"]) / len(metrics["ssim"])
+        image = Image.open(img_path)
 
-# print(f"LR downscaled vs. SR output: PSNR - {psnr} , SSIM - {ssim}")
+        lr_tensor = to_tensor(image).unsqueeze(0)  # Add batch dimension
+        with torch.no_grad():  # Disable gradient calculation for inference
+            sr_tensor = model(lr_tensor)  # Pass the LR tensor through the model
+        sr_image = to_pil_image(sr_tensor.squeeze(0))  # Remove the batch dimension
+        en_sr_image = enhance(sr_image)
+        wild_image_resized = image.resize(
+            (
+                int(en_sr_image.width * en_sr_image.height / en_sr_image.height),
+                en_sr_image.height,
+            ),
+            resample=Image.NEAREST,
+        )
+        combined_image = Image.new(
+            "RGB",
+            (
+                wild_image_resized.width + en_sr_image.width,
+                en_sr_image.height,
+            ),
+        )
+        combined_image.paste(wild_image_resized, (0, 0))
+        combined_image.paste(en_sr_image, (wild_image_resized.width, 0))
 
-create_visualization(input_dir, output_dir, hr_dir, visualization_dir)
+        save_path = os.path.join(output_dir, os.path.basename(img_path))
+        combined_image.save(save_path)
+    return None
+
+
+if __name__ == "__main__":
+    dataset_type = "pa"
+    scale = 4
+    model_name = f"ninasr_b0_x{scale}_{dataset_type}"
+    output_dir = f"/home/oliver/ADRA/experiments-superres/dataset/model_usage/{dataset_type}/UserSupplied/sr_output/{model_name}"
+    input_dir = f"/home/oliver/ADRA/experiments-superres/dataset/model_usage/{dataset_type}/UserSupplied/UserSupplied_test_LR_bicubic/X{scale}"
+    wild_in_dir = f"/home/oliver/ADRA/experiments-superres/dataset/source/{dataset_type}_clean/lo_res"
+    wild_out_dir = f"/home/oliver/ADRA/experiments-superres/dataset/model_usage/{dataset_type}/UserSupplied/sr_output/{model_name}/wild/lo_res"
+    hr_dir = f"/home/oliver/ADRA/experiments-superres/dataset/model_usage/{dataset_type}/UserSupplied/UserSupplied_test_HR"
+    visualization_dir = os.path.join(output_dir, "visual")
+
+    print(f"Evaluating testset for {model_name} on {input_dir}")
+
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(visualization_dir, exist_ok=True)
+    os.makedirs(wild_out_dir, exist_ok=True)
+
+    model = load_model(model_name, scale)
+
+    generate_sr(input_dir, output_dir, model)
+
+    create_visualization(input_dir, output_dir, hr_dir, visualization_dir)
+
+    metrics = {
+        "0_nn": calculate_psnr_ssim(input_dir, hr_dir, upscale_type="lr_nn"),
+        "1_bilinear": calculate_psnr_ssim(
+            input_dir, hr_dir, upscale_type="lr_bilinear"
+        ),
+        "2_sr": calculate_psnr_ssim(output_dir, hr_dir, upscale_type="sr"),
+        "3_sr_enhanced": calculate_psnr_ssim(
+            output_dir, hr_dir, upscale_type="sr_enhanced"
+        ),
+    }
+
+    pprint(metrics)
+
+    # generate_enhanced_sr_wild(wild_in_dir, wild_out_dir, model, sample=25)
