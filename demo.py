@@ -8,7 +8,7 @@ from imutils import paths
 from PIL import Image, ImageEnhance
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from skimage.transform import resize
-from torchsr.models import ninasr_b0  # or import rcan if needed
+from torchsr.models import ninasr_b0, ninasr_b2  # or import rcan if needed
 from torchvision.transforms.functional import to_pil_image, to_tensor
 
 
@@ -62,9 +62,9 @@ def calculate_psnr_ssim(folder_in, folder_hr, upscale_type):
                     in_img_resized = np.array(
                         resize_image_to_match(in_img, hr_img, Image.NEAREST)
                     )
-                case "lr_bilinear":
+                case "lr_lanczos":
                     in_img_resized = np.array(
-                        resize_image_to_match(in_img, hr_img, Image.BILINEAR)
+                        resize_image_to_match(in_img, hr_img, Image.LANCZOS)
                     )
                 case "sr":  # This is for the already SR upscaled folder
                     in_img = resize_image_to_match(in_img, hr_img)
@@ -190,7 +190,7 @@ def create_visualization(input_dir, output_dir, hr_dir, visualization_dir):
 
 def load_model(model_name, scale):
     model_path = f"./{model_name}_model.pt"
-    model = ninasr_b0(
+    model = ninasr_b2(
         scale=int(scale)
     )  # Use the correct scale for your model (8 in this case)
     model.load_state_dict(torch.load(model_path))
@@ -254,9 +254,10 @@ def generate_enhanced_sr_wild(input_dir, output_dir, model, sample=None):
 
 
 if __name__ == "__main__":
-    dataset_type = "pa"
-    scale = 4
-    model_name = f"ninasr_b0_x{scale}_{dataset_type}"
+    model_arch = "ninasr_b2"
+    dataset_type = "bwpa"
+    scale = 8
+    model_name = f"{model_arch}_x{scale}_{dataset_type}"
     output_dir = f"/home/oliver/ADRA/experiments-superres/dataset/model_usage/{dataset_type}/UserSupplied/sr_output/{model_name}"
     input_dir = f"/home/oliver/ADRA/experiments-superres/dataset/model_usage/{dataset_type}/UserSupplied/UserSupplied_test_LR_bicubic/X{scale}"
     wild_in_dir = f"/home/oliver/ADRA/experiments-superres/dataset/source/{dataset_type}_clean/lo_res"
@@ -272,15 +273,13 @@ if __name__ == "__main__":
 
     model = load_model(model_name, scale)
 
-    generate_sr(input_dir, output_dir, model)
+    # generate_sr(input_dir, output_dir, model)
 
     create_visualization(input_dir, output_dir, hr_dir, visualization_dir)
 
     metrics = {
         "0_nn": calculate_psnr_ssim(input_dir, hr_dir, upscale_type="lr_nn"),
-        "1_bilinear": calculate_psnr_ssim(
-            input_dir, hr_dir, upscale_type="lr_bilinear"
-        ),
+        "1_lanczos": calculate_psnr_ssim(input_dir, hr_dir, upscale_type="lr_lanczos"),
         "2_sr": calculate_psnr_ssim(output_dir, hr_dir, upscale_type="sr"),
         "3_sr_enhanced": calculate_psnr_ssim(
             output_dir, hr_dir, upscale_type="sr_enhanced"
@@ -289,4 +288,4 @@ if __name__ == "__main__":
 
     pprint(metrics)
 
-    # generate_enhanced_sr_wild(wild_in_dir, wild_out_dir, model, sample=25)
+    generate_enhanced_sr_wild(wild_in_dir, wild_out_dir, model, sample=40)
