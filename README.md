@@ -1,8 +1,8 @@
 # Usage
 
-- Install requirements.txt
-- Download the ninasr_b2 model from [here](https://drive.google.com/file/d/10qR1vjP-O4sfVYI2JKWMJts1TEUvCRbr/view?usp=drive_link), put in the root directory.
-- In root directory, `python app.py` to run Flask app
+- Create a new env: `conda create -n myenv python=3.12 && conda activate myenv`
+- Install the packages (may differ based on GPU/ CUDA) `pip install opencv-python torch torchvision imutils pillow scikit-image flask`
+- Download the ninasr_b2 model from [here](https://drive.google.com/file/d/10qR1vjP-O4sfVYI2JKWMJts1TEUvCRbr/view?usp=drive_link), put in the root director>- In root directory, `python app.py` to run Flask app
 - Use browser to try SR on uploaded low res xrays.
 
 # Original Repo README
