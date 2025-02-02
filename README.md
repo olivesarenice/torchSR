@@ -10,7 +10,7 @@ pip install -r requirements.txt
 conda activate torchsr
 ```
 
-Download the model weights from here [], place it in the repo root. It should be named `ninasr_b2_x4_bwpa_model.pt`
+Download the model weights from [here](https://drive.google.com/file/d/1aRytvFrbIgw36VbPpPKL-iiuuTkUx1KF/view?usp=drive_link), place it in the repo root. It should be named `ninasr_b2_x4_bwpa_model.pt`
 
 ## Usage
 
