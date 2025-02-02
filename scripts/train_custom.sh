@@ -66,12 +66,12 @@ train_network () {
 #         --weight-norm
 # }
 
-epochs=100
+epochs=300
 patch_size=48
-learning_rate=0.001
+learning_rate=0.0003
 
 # NinaSR-B0
-train_network ninasr_b2 8 bwpa /home/oliver/ADRA/experiments-superres/dataset/model_usage/bwpa
+train_network ninasr_b2 4 bwpa /home/oliver/ADRA/experiments-superres/lib/torchSR/user_datasets/3_model_usage/bwpa
 # train_network ninasr_b0 3 
 # train_network ninasr_b0 4 
 # train_network ninasr_b0 8 

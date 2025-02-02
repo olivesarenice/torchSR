@@ -10,17 +10,18 @@ from imutils import paths
 from PIL import Image, ImageEnhance
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from skimage.transform import resize
-from torchsr.models import ninasr_b0, ninasr_b2  # or import rcan if needed
 from torchvision.transforms.functional import to_pil_image, to_tensor
+
+from torchsr.models import ninasr_b0, ninasr_b2  # or import rcan if needed
 
 model_arch = "ninasr_b2"
 dataset_type = "bwpa"
-scale = 8
+scale = 4
 model_name = f"{model_arch}_x{scale}_{dataset_type}"
 
 
 def load_model(model_name=model_name, scale=scale):
-    model_path = f"./{model_name}_model.pt"
+    model_path = f"user_models/{model_name}_model.pt"
     model = ninasr_b2(
         scale=int(scale)
     )  # Use the correct scale for your model (8 in this case)

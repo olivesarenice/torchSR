@@ -1,9 +1,51 @@
-# Usage
+# Info
 
-- Install requirements.txt
-- Download the ninasr_b2 model from [here](https://drive.google.com/file/d/10qR1vjP-O4sfVYI2JKWMJts1TEUvCRbr/view?usp=drive_link), put in the root directory.
-- In root directory, `python app.py` to run Flask app
-- Use browser to try SR on uploaded low res xrays.
+This is a fork of the torchSR repo for custom training data with helper scripts.
+
+## Setup
+
+```
+conda create -n torchsr python=3.12
+pip install -r requirements.txt
+conda activate torchsr
+```
+
+Download the model weights from here [], place it in the repo root. It should be named `ninasr_b2_x4_bwpa_model.pt`
+
+## Usage
+
+Different options depending on the quality of your dataset.
+
+
+**If starting with a dataset with lo-res and hi-res and blur/ overexposed xrays mixed together:**
+
+1) Copy image files (.png) into `user_datasets/1_source/bwpa/original`.
+2) Run `python tools/dataset_profiler.py` - this will produce a `user_datasets/1_source/bwpa/profiled` subfolder of images that are hi-res and lo-res according to the settings in the .py. Subsequently, in-the-wild images will be taken from `/lo_res`
+3) If further curation for blurness and exposure is needed, first create a folder like so: `user_datasets/2_curate/bwpa/original` and copy your hi-res images there. Then run `python tools/dataset_autocurate.py` - this will produce a `user_datasets/2_curate/bwpa/autocurate` subfolder. Good images for training are stored in `/pass`
+4) If curation is not needed, manually paste your training images into the `/pass` folder.
+5) Run `python tools/dataset_splits` - this creates the train-val-test image folders and splits them accordingly. The folder structure is designed to match the structure expected by the model's training script. You can modify `dataset_splits.py` to adjust the SR scale that you are training for (4,8)
+6) Configure the script in `scripts/train_custom.sh`: 
+
+    Make sure you set the correct input training folder like so:
+   
+      epochs=300
+      patch_size=48
+      learning_rate=0.0003
+      train_network ninasr_b2 4 bwpa {repo_root}/user_datasets/3_model_usage/bwpa
+
+7) Run `scripts/train_custom.sh` to train
+8) Run `demo.py` - this does 4 things: 
+   1) Generates the SR images of the test set images 
+   2) Creates a comparison viz image of various upscaling methods vs. the SR image vs. the original HR image 
+   3) Calculates the average PSNR and SSIM for the different methods in (2)
+   4) Generates the SR images for the in-the-wild lo-res images, and places them side-by-side with NN-upscaled and Lanczos-upscaled versions of the same lo-res image.
+
+**If you want to just try the existing model**
+
+1) In root directory, `python app.py` to run Flask app
+2) Use browser to try SR on uploaded low res xrays.
+   
+---
 
 # Original Repo README
 

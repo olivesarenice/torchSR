@@ -3,3 +3,9 @@ data/
 results/
 *.py[cod]
 *.pt
+
+
+user_datasets/**/*.png
+user_datasets/**/*.jpg
+user_datasets/**/*.npy
+user_datasets/**/*.zip

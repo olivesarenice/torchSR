@@ -189,13 +189,40 @@ def create_visualization(input_dir, output_dir, hr_dir, visualization_dir):
 
 
 def load_model(model_name, scale):
-    model_path = f"./{model_name}_model.pt"
+    model_path = f"user_models/{model_name}_model.pt"
     model = ninasr_b2(
         scale=int(scale)
     )  # Use the correct scale for your model (8 in this case)
     model.load_state_dict(torch.load(model_path))
     model.eval()  # Set the model to evaluation mode
     return model
+
+
+def resize_to_target(image, target_size=600):
+    """
+    Resizes the image based on its dimensions:
+    - If smaller than target_size, upscale using Lanczos.
+    - If larger than target_size, downscale using Bicubic.
+
+    :param image: PIL Image object to resize.
+    :param target_size: Threshold size for resizing.
+    :return: Resized PIL Image object.
+    """
+    if max(image.size) < target_size:
+        # Upscale using Lanczos
+        new_size = (
+            int(image.width * (target_size / max(image.size))),
+            int(image.height * (target_size / max(image.size))),
+        )
+        return image.resize(new_size, Image.LANCZOS)
+    elif max(image.size) > target_size:
+        # Downscale using Bicubic
+        new_size = (
+            int(image.width * (target_size / max(image.size))),
+            int(image.height * (target_size / max(image.size))),
+        )
+        return image.resize(new_size, Image.BICUBIC)
+    return image  # Return original if exactly target_size
 
 
 def generate_sr(input_dir, output_dir, model, sample=None):
@@ -211,26 +238,56 @@ def generate_sr(input_dir, output_dir, model, sample=None):
         with torch.no_grad():  # Disable gradient calculation for inference
             sr_tensor = model(lr_tensor)  # Pass the LR tensor through the model
         sr_image = to_pil_image(sr_tensor.squeeze(0))  # Remove the batch dimension
+        sr_image = resize_to_target(sr_image)
         save_path = os.path.join(output_dir, os.path.basename(img_path))
         sr_image.save(save_path)
     return None
 
 
-def generate_enhanced_sr_wild(input_dir, output_dir, model, sample=None):
+def generate_enhanced_sr_wild(
+    input_dir, output_dir, model, sample=None, show_lanczos=False
+):
+    """
+    Generates SR-enhanced images with optional Lanczos resizing visualization.
+
+    :param input_dir: Directory with input images.
+    :param output_dir: Directory to save enhanced images.
+    :param model: Super-resolution model for processing.
+    :param sample: Number of images to process (default: all).
+    :param show_lanczos: Whether to include a Lanczos-resized version in the output.
+    """
     print(f"Generating SR enhanced for in the wild {input_dir} to {output_dir}")
     img_paths = list(paths.list_images(input_dir))
     if sample:
-        img_paths = img_paths[0:sample]
-    for img_path in img_paths:
-        print(img_path)
+        img_paths = img_paths[:sample]
 
+    for img_path in img_paths:
+        print(f"Processing {img_path}")
+
+        # Open the original image
         image = Image.open(img_path)
 
+        # Prepare input tensor
         lr_tensor = to_tensor(image).unsqueeze(0)  # Add batch dimension
-        with torch.no_grad():  # Disable gradient calculation for inference
+
+        # Perform super-resolution using the model
+        with torch.no_grad():
             sr_tensor = model(lr_tensor)  # Pass the LR tensor through the model
+
+        # Convert to PIL image
         sr_image = to_pil_image(sr_tensor.squeeze(0))  # Remove the batch dimension
+        sr_image = resize_to_target(sr_image)  # Resize to target resolution
+
+        # Apply enhancement
         en_sr_image = enhance(sr_image)
+
+        # Optionally resize the original image with Lanczos
+        if show_lanczos:
+            lanczos_resized = image.resize(
+                (en_sr_image.width, en_sr_image.height), resample=Image.LANCZOS
+            )
+
+        # Resize the original image for side-by-side display
         wild_image_resized = image.resize(
             (
                 int(en_sr_image.width * en_sr_image.height / en_sr_image.height),
@@ -238,31 +295,46 @@ def generate_enhanced_sr_wild(input_dir, output_dir, model, sample=None):
             ),
             resample=Image.NEAREST,
         )
-        combined_image = Image.new(
-            "RGB",
+
+        # Create the combined image
+        num_images = 3 if show_lanczos else 2
+        combined_width = (
+            wild_image_resized.width
+            + (lanczos_resized.width if show_lanczos else 0)
+            + en_sr_image.width
+        )
+        combined_image = Image.new("RGB", (combined_width, en_sr_image.height))
+
+        combined_image.paste(wild_image_resized, (0, 0))
+        if show_lanczos:
+            combined_image.paste(lanczos_resized, (wild_image_resized.width, 0))
+        combined_image.paste(
+            en_sr_image,
             (
-                wild_image_resized.width + en_sr_image.width,
-                en_sr_image.height,
+                wild_image_resized.width
+                + (lanczos_resized.width if show_lanczos else 0),
+                0,
             ),
         )
-        combined_image.paste(wild_image_resized, (0, 0))
-        combined_image.paste(en_sr_image, (wild_image_resized.width, 0))
 
+        # Save the combined image
         save_path = os.path.join(output_dir, os.path.basename(img_path))
         combined_image.save(save_path)
-    return None
+        print(f"Saved combined image to {save_path}")
+
+    print("Wild vs. SR enhancement completed.")
 
 
 if __name__ == "__main__":
     model_arch = "ninasr_b2"
     dataset_type = "bwpa"
-    scale = 8
+    scale = 4
     model_name = f"{model_arch}_x{scale}_{dataset_type}"
-    output_dir = f"/home/oliver/ADRA/experiments-superres/dataset/model_usage/{dataset_type}/UserSupplied/sr_output/{model_name}"
-    input_dir = f"/home/oliver/ADRA/experiments-superres/dataset/model_usage/{dataset_type}/UserSupplied/UserSupplied_test_LR_bicubic/X{scale}"
-    wild_in_dir = f"/home/oliver/ADRA/experiments-superres/dataset/source/{dataset_type}_clean/lo_res"
-    wild_out_dir = f"/home/oliver/ADRA/experiments-superres/dataset/model_usage/{dataset_type}/UserSupplied/sr_output/{model_name}/wild/lo_res"
-    hr_dir = f"/home/oliver/ADRA/experiments-superres/dataset/model_usage/{dataset_type}/UserSupplied/UserSupplied_test_HR"
+    output_dir = f"/home/oliver/ADRA/experiments-superres/lib/torchSR/user_datasets/3_model_usage/{dataset_type}/UserSupplied/sr_output/{model_name}"
+    input_dir = f"/home/oliver/ADRA/experiments-superres/lib/torchSR/user_datasets/3_model_usage/{dataset_type}/UserSupplied/UserSupplied_test_LR_bicubic/X{scale}"
+    wild_in_dir = f"/home/oliver/ADRA/experiments-superres/lib/torchSR/user_datasets/1_source/{dataset_type}/profiled/low_res"
+    wild_out_dir = f"/home/oliver/ADRA/experiments-superres/lib/torchSR/user_datasets/3_model_usage/{dataset_type}/UserSupplied/sr_output/{model_name}/wild/lo_res"
+    hr_dir = f"/home/oliver/ADRA/experiments-superres/lib/torchSR/user_datasets/3_model_usage/{dataset_type}/UserSupplied/UserSupplied_test_HR"
     visualization_dir = os.path.join(output_dir, "visual")
 
     print(f"Evaluating testset for {model_name} on {input_dir}")
@@ -273,7 +345,7 @@ if __name__ == "__main__":
 
     model = load_model(model_name, scale)
 
-    # generate_sr(input_dir, output_dir, model)
+    generate_sr(input_dir, output_dir, model)
 
     create_visualization(input_dir, output_dir, hr_dir, visualization_dir)
 
@@ -288,4 +360,6 @@ if __name__ == "__main__":
 
     pprint(metrics)
 
-    generate_enhanced_sr_wild(wild_in_dir, wild_out_dir, model, sample=40)
+    generate_enhanced_sr_wild(
+        wild_in_dir, wild_out_dir, model, sample=50, show_lanczos=True
+    )
